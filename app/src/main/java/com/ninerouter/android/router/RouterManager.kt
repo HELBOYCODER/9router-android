@@ -78,6 +78,8 @@ object RouterManager {
         error: String? = null,
         instanceId: String? = _state.value.instanceId,
     ) {
+        val ctx = appContext
+        val present = ctx != null && TermuxIntegration.isInstalled(ctx) && TermuxIntegration.hasPermission(ctx)
         _state.value = RouterStatus(
             status = status,
             host = host,
@@ -89,8 +91,7 @@ object RouterManager {
             lastError = error,
             requestCount = requestCount,
             instanceId = instanceId,
-            runtimePresent = TermuxIntegration.isInstalled(appContext!!) &&
-                TermuxIntegration.hasPermission(appContext!!),
+            runtimePresent = present,
         )
     }
 
