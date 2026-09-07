@@ -30,8 +30,8 @@ import kotlin.math.pow
 object RouterManager {
 
     private const val TAG = "RouterManager"
-    private const val HEALTH_TIMEOUT_MS = 45_000L
-    private const val BASE_BACKOFF_MS = 1_000L
+    private const val HEALTH_TIMEOUT_MS = 180_000L
+    private const val BASE_BACKOFF_MS = 2_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val mutex = Mutex()
@@ -232,13 +232,14 @@ object RouterManager {
             return
         }
 
-        // Bootstrap/build can take a while on the first run. Health verification
-        // waits until the Termux-owned Node process answers.
+        // Bootstrap/build can take a while on the first run. The user connects
+        // to the dashboard directly in the WebView, so probe the dashboard for
+        // readiness; the /v1 API is informational only.
         healthJob = scope.launch {
-            val health = HealthChecker.waitUntilHealthy(config.apiBaseUrl, apiKey, HEALTH_TIMEOUT_MS)
+            val health = HealthChecker.waitUntilHealthy(config.dashboardUrl, HEALTH_TIMEOUT_MS)
             if (!shouldBeRunning) return@launch
-            if (health.ready || health.healthy) {
-                LogStore.info(TAG, "9Router is healthy (HTTP ${health.httpCode}, ${health.latencyMs}ms)")
+            if (health.healthy) {
+                LogStore.info(TAG, "9Router dashboard reachable (HTTP ${health.httpCode}, ${health.latencyMs}ms)")
                 emit(
                     status = ConnectionStatus.CONNECTED,
                     host = config.host,
@@ -248,26 +249,29 @@ object RouterManager {
                     error = null,
                     instanceId = InstanceManager.currentInstanceId(ctx),
                 )
-                // Termux owns the server process, so observe it through health
-                // probes rather than Process.waitFor().
+                val apiCheck = HealthChecker.check(config.apiBaseUrl, apiKey)
+                if (apiCheck.ready) {
+                    LogStore.info(TAG, "OpenAI-compatible /v1 ready (HTTP ${apiCheck.httpCode})")
+                } else if (apiCheck.healthy) {
+                    LogStore.info(TAG, "/v1 answered (HTTP ${apiCheck.httpCode}); dashboard usable")
+                } else {
+                    LogStore.warn(TAG, "/v1 probe failed (${apiCheck.error ?: "HTTP ${apiCheck.httpCode}"}); dashboard still works")
+                }
                 while (shouldBeRunning) {
-                    delay(5_000)
-                    val check = HealthChecker.check(config.apiBaseUrl, apiKey)
-                    if (!check.healthy) {
-                        LogStore.warn(TAG, "Termux-hosted 9Router stopped responding")
+                    delay(8_000)
+                    val probe = HealthChecker.check(config.dashboardUrl)
+                    if (!probe.healthy) {
+                        LogStore.warn(TAG, "9Router dashboard stopped responding")
                         handleExit(-1)
                         break
                     }
                 }
             } else {
-                LogStore.error(TAG, "Health check failed: ${health.error ?: "no response (HTTP ${health.httpCode})"}")
-                // The process may still be cranking; give the auto-recovery a chance
-                // by letting onExit (on a crash) drive a retry. If it simply can't
-                // bind it will exit and onExit triggers backoff. Report state now.
-                if (currentProcess?.isAlive != true) {
-                    emit(ConnectionStatus.ERROR, host = config.bindHost, port = config.port, apiKey = apiKey,
-                        error = "Instance not responding", instanceId = InstanceManager.currentInstanceId(ctx))
-                }
+                LogStore.error(TAG, "Dashboard health check failed: ${health.error ?: "no response (HTTP ${health.httpCode})"}")
+                emit(ConnectionStatus.ERROR, host = config.host, port = config.port, apiKey = apiKey,
+                    error = "9Router did not become reachable in ${HEALTH_TIMEOUT_MS / 1000}s. Check ~/.9router/bootstrap.log on Termux.",
+                    instanceId = InstanceManager.currentInstanceId(ctx))
+                shouldBeRunning = false
             }
         }
     }

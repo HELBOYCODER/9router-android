@@ -101,69 +101,79 @@ object TermuxIntegration {
         return runCatching { context.startService(intent); true }.getOrElse { false }
     }
 
-    private fun q(value: String): String = "'" + value.replace("'", "'\\''") + "'"
-
+    // The bootstrap script is built line-by-line so the Kotlin compiler treats
+    // any '$' as a literal character (bash variable). Avoid using Kotlin
+    // triple-quoted strings combined with shell variables — they collide and
+    // silently break the script.
     private fun bootstrapScript(config: InstanceConfig, reinitialize: Boolean): String {
         val port = config.port
-        val dollar = '$'
-        val reset = if (reinitialize) "rm -rf ${dollar}APP_DIR/data ${dollar}APP_DIR/.env" else ":"
-        // Keep the script POSIX/bash compatible with Termux. DOLLAR placeholders
-        // avoid Kotlin interpolating shell variables before the intent is sent.
-        return """
-            set -Eeuo pipefail
-            HOME_DIR="__DOLLAR__HOME"
-            APP_DIR="__DOLLAR__HOME_DIR/.9router"
-            REPO_DIR="__DOLLAR__APP_DIR/upstream"
-            LOG="__DOLLAR__APP_DIR/bootstrap.log"
-            mkdir -p "__DOLLAR__APP_DIR"
-            exec >>"__DOLLAR__LOG" 2>&1
-            echo "[9router] bootstrap started __DOLLAR__(date -Is)"
-            command -v pkg >/dev/null 2>&1 || { echo "ERROR: Termux pkg not found"; exit 20; }
-            pkg update -y
-            for p in nodejs-lts git curl; do
-              command -v "__DOLLAR__{p%%-*}" >/dev/null 2>&1 || pkg install -y "__DOLLAR__p"
-            done
-            command -v npm >/dev/null 2>&1 || pkg install -y nodejs-lts
-            $reset
-            mkdir -p "__DOLLAR__APP_DIR"
-            if [ ! -d "__DOLLAR__REPO_DIR/.git" ]; then
-              rm -rf "__DOLLAR__REPO_DIR"
-              git clone --depth 1 https://github.com/decolua/9router.git "__DOLLAR__REPO_DIR"
-            fi
-            cd "__DOLLAR__REPO_DIR"
-            git fetch --depth 1 origin eb712ca821f0ba6bc41043fbd14494c5af5daba5
-            git checkout --force eb712ca821f0ba6bc41043fbd14494c5af5daba5
-            npm install --no-audit --no-fund
-            npm run build
-            mkdir -p "__DOLLAR__APP_DIR/data"
-            if [ ! -f "__DOLLAR__APP_DIR/.env" ]; then
-              JWT=__DOLLAR__(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')
-              PASS=__DOLLAR__(node -e 'console.log(require("crypto").randomBytes(16).toString("hex"))')
-              API=__DOLLAR__(node -e 'console.log(require("crypto").randomBytes(32).toString("hex"))')
-              SALT=__DOLLAR__(node -e 'console.log(require("crypto").randomBytes(16).toString("hex"))')
-              cat >"__DOLLAR__APP_DIR/.env" <<ENV
-            JWT_SECRET=__DOLLAR__JWT
-            INITIAL_PASSWORD=__DOLLAR__PASS
-            API_KEY_SECRET=__DOLLAR__API
-            MACHINE_ID_SALT=__DOLLAR__SALT
-            DATA_DIR=__DOLLAR__APP_DIR/data
-            PORT=$port
-            HOSTNAME=127.0.0.1
-            NODE_ENV=production
-            BASE_URL=http://127.0.0.1:$port
-            NEXT_PUBLIC_BASE_URL=http://127.0.0.1:$port
-            AUTH_COOKIE_SECURE=false
-            REQUIRE_API_KEY=false
-            ENABLE_REQUEST_LOGS=false
-            OBSERVABILITY_ENABLED=true
-            ENV
-              chmod 600 "__DOLLAR__APP_DIR/.env"
-            fi
-            pkill -f '9router/.next/standalone/custom-server.js' 2>/dev/null || true
-            cd "__DOLLAR__REPO_DIR/.next/standalone"
-            set -a; . "__DOLLAR__APP_DIR/.env"; set +a
-            nohup node custom-server.js --port $port >"__DOLLAR__APP_DIR/server.log" 2>&1 &
-            echo "[9router] server started on 127.0.0.1:$port"
-        """.trimIndent().replace("__DOLLAR__", dollar.toString())
+        val reset = if (reinitialize) "rm -rf \$APP_DIR/data \$APP_DIR/.env" else ":"
+        val lines = listOf(
+            "set -Eeuo pipefail",
+            "HOME_DIR=\"\$HOME\"",
+            "APP_DIR=\"\$HOME_DIR/.9router\"",
+            "REPO_DIR=\"\$APP_DIR/upstream\"",
+            "LOG=\"\$APP_DIR/bootstrap.log\"",
+            "SERVER_LOG=\"\$APP_DIR/server.log\"",
+            "mkdir -p \"\$APP_DIR\"",
+            "exec >>\"\$LOG\" 2>&1",
+            "echo \"[9router] bootstrap started \$(date -Is) on port $port\"",
+            "command -v pkg >/dev/null 2>&1 || { echo \"ERROR: Termux pkg not found\"; exit 20; }",
+            "pkg update -y",
+            "NEED=\"\"",
+            "command -v node >/dev/null 2>&1 || NEED=\"\$NEED nodejs-lts\"",
+            "command -v npm >/dev/null 2>&1 || NEED=\"\$NEED nodejs-lts\"",
+            "command -v git >/dev/null 2>&1 || NEED=\"\$NEED git\"",
+            "command -v curl >/dev/null 2>&1 || NEED=\"\$NEED curl\"",
+            "if [ -n \"\$NEED\" ]; then echo \"[9router] installing:\$NEED\"; pkg install -y \$NEED; fi",
+            reset,
+            "mkdir -p \"\$APP_DIR\"",
+            "if [ ! -d \"\$REPO_DIR/.git\" ]; then",
+            "  rm -rf \"\$REPO_DIR\"",
+            "  echo \"[9router] cloning upstream\"",
+            "  git clone --depth 1 https://github.com/decolua/9router.git \"\$REPO_DIR\"",
+            "fi",
+            "cd \"\$REPO_DIR\"",
+            "git fetch --depth 1 origin eb712ca821f0ba6bc41043fbd14494c5af5daba5",
+            "git checkout --force eb712ca821f0ba6bc41043fbd14494c5af5daba5",
+            "echo \"[9router] installing npm dependencies\"",
+            "npm install --no-audit --no-fund",
+            "echo \"[9router] running next build\"",
+            "npm run build",
+            "mkdir -p \"\$APP_DIR/data\"",
+            "if [ ! -f \"\$APP_DIR/.env\" ]; then",
+            "  echo \"[9router] generating local secrets\"",
+            "  JWT=\$(node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')",
+            "  PASS=\$(node -e 'console.log(require(\"crypto\").randomBytes(16).toString(\"hex\"))')",
+            "  API=\$(node -e 'console.log(require(\"crypto\").randomBytes(32).toString(\"hex\"))')",
+            "  SALT=\$(node -e 'console.log(require(\"crypto\").randomBytes(16).toString(\"hex\"))')",
+            "  cat > \"\$APP_DIR/.env\" <<ENV",
+            "JWT_SECRET=***",
+            "INITIAL_PASSWORD=***",
+            "API_KEY_SECRET=***",
+            "MACHINE_ID_SALT=***",
+            "DATA_DIR=\$APP_DIR/data",
+            "PORT=$port",
+            "HOSTNAME=127.0.0.1",
+            "NODE_ENV=production",
+            "BASE_URL=http://127.0.0.1:$port",
+            "NEXT_PUBLIC_BASE_URL=http://127.0.0.1:$port",
+            "AUTH_COOKIE_SECURE=false",
+            "REQUIRE_API_KEY=false",
+            "ENABLE_REQUEST_LOGS=false",
+            "OBSERVABILITY_ENABLED=true",
+            "ENV",
+            "  chmod 600 \"\$APP_DIR/.env\"",
+            "fi",
+            "pkill -f '9router/.next/standalone/custom-server.js' 2>/dev/null || true",
+            "cd \"\$REPO_DIR/.next/standalone\"",
+            "set -a",
+            ". \"\$APP_DIR/.env\"",
+            "set +a",
+            "echo \"[9router] starting server\"",
+            "nohup node custom-server.js --port $port > \"\$SERVER_LOG\" 2>&1 &",
+            "echo \"[9router] server pid=\$! 127.0.0.1:$port\"",
+        )
+        return lines.joinToString("\n")
     }
 }

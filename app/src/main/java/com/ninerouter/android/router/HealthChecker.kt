@@ -82,4 +82,42 @@ object HealthChecker {
 
     /** Single synchronous probe used by re-verification. */
     suspend fun check(baseUrl: String, apiKey: String): HealthResult = probe(baseUrl, apiKey)
+
+    /** Probe any absolute URL; falls back when the server is up but the API requires auth. */
+    suspend fun check(url: String): HealthResult = probeUrl(url.trimEnd('/'))
+
+    /** Poll until the server responds at the given URL. */
+    suspend fun waitUntilHealthy(
+        url: String,
+        timeoutMs: Long,
+        intervalMs: Long = 700,
+    ): HealthResult {
+        val u = url.trimEnd('/')
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var last = check(u)
+        while (System.currentTimeMillis() < deadline) {
+            if (last.healthy) return last
+            delay(intervalMs)
+            last = check(u)
+        }
+        return last
+    }
+
+    private suspend fun probeUrl(url: String): HealthResult = withContext(Dispatchers.IO) {
+        val start = System.currentTimeMillis()
+        try {
+            client.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
+                val code = resp.code
+                val latency = System.currentTimeMillis() - start
+                AppLogger.d(TAG, "Probe $url -> HTTP $code")
+                HealthResult(healthy = code != 0, ready = code in 200..299, httpCode = code, latencyMs = latency)
+            }
+        } catch (ce: CancellationException) {
+            throw ce
+        } catch (e: Exception) {
+            val latency = System.currentTimeMillis() - start
+            AppLogger.d(TAG, "Probe $url failed: ${e.message}")
+            HealthResult(false, false, 0, latency, e.message)
+        }
+    }
 }
