@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="md_theme_primary">#4A5BD7</color>
+    <color name="md_theme_onPrimary">#FFFFFF</color>
+    <color name="md_theme_surface">#FBF8FF</color>
+    <color name="md_theme_background">#FBF8FF</color>
+    <color name="router_online">#2E7D32</color>
+    <color name="router_offline">#8E8E93</color>
+    <color name="router_connecting">#F9A825</color>
+    <color name="router_error">#C62828</color>
+
+    <!-- Splash / window background -->
+    <color name="window_background">#FBF8FF</color>
+
+    <!-- Launcher icon: adaptive background -->
+    <color name="ic_launcher_background">#4A5BD7</color>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose app: use a platform Material theme so we don't need the
+         com.google.android.material components library. -->
+    <style name="Theme.NineRouter" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:colorAccent">@color/md_theme_primary</item>
+    </style>
+
+    <!-- Values-v31 splash theme is applied on Android 12+ via the launcher activity. -->
+    <style name="Theme.NineRouter.Starting" parent="Theme.NineRouter">
+        <item name="android:windowSplashScreenBackground">@color/window_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+    </style>
+</resources>

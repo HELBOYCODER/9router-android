@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext policy.
+
+    127.0.0.1 / ::1 : always allowed (local router, HTTP by default).
+    Local network   : allowed so LAN mode (0.0.0.0) works over HTTP on e.g. 192.168.x.x.
+                      The UI warns the user before LAN access is enabled; for production
+                      you should terminate TLS at the router (9Router supports HTTPS via
+                      self-signed certs) or put a reverse proxy in front.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="true">::1</domain>
+        <!-- LAN / private ranges handled by base-config above. -->
+    </domain-config>
+</network-security-config>
