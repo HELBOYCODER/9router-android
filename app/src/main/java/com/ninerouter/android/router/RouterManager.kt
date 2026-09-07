@@ -30,7 +30,7 @@ import kotlin.math.pow
 object RouterManager {
 
     private const val TAG = "RouterManager"
-    private const val HEALTH_TIMEOUT_MS = 180_000L
+    private const val HEALTH_TIMEOUT_MS = 600_000L
     private const val BASE_BACKOFF_MS = 2_000L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
