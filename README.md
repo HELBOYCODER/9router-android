@@ -112,9 +112,20 @@ allow-external-apps=true
 
 In Android Settings grant the 9Router app **Run commands in Termux** under
 Additional permissions. On first CONNECT the app checks `pkg`, Node.js/npm, git,
-and curl, installs missing packages, clones the pinned upstream 9Router source,
+and curl, installs missing packages, clones upstream 9Router source,
 installs dependencies, builds the Next.js standalone server, generates local
-secrets, and starts the server in Termux.
+secrets, registers `termux-services`, and starts the server in Termux.
+
+#### Alternative: 1-line Termux installation (Hermes style)
+
+If you prefer to bootstrap and run 9Router directly inside Termux:
+
+```bash
+pkg install -y curl
+curl -fsSL https://raw.githubusercontent.com/3krbkbkrbrbg/9router-android/main/scripts/termux-install.sh | bash
+```
+
+This installs all dependencies, builds 9Router standalone, and sets up `termux-services` for persistent 24/7 background execution.
 
 Android does not allow another app to silently install APKs or grant permissions;
 those steps require user approval.

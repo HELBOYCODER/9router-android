@@ -79,6 +79,17 @@ eb712ca821f0ba6bc41043fbd14494c5af5daba5
 9Router v0.5.69
 ```
 
+### نصب سریع در Termux با یک دستور (مشابه Hermes)
+
+اگر ترجیح می‌دهید ۹روتر را مستقیماً از محیط خط فرمان Termux راه بیندازید و همیشه ۲۴/۷ فعال باشد:
+
+```bash
+pkg install -y curl
+curl -fsSL https://raw.githubusercontent.com/3krbkbkrbrbg/9router-android/main/scripts/termux-install.sh | bash
+```
+
+پس از پایان، داشبورد روی `http://127.0.0.1:20128/dashboard` بالا می‌آید و سرویس از طریق `termux-services` در پس‌زمینه زنده می‌ماند.
+
 ## مستندات
 
 - [English README](./README.md)
