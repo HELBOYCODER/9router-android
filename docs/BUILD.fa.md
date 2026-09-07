@@ -1,28 +1,14 @@
-# راهنمای Build اندروید
+# راهنمای Build نسخه Termux
 
-## پیش‌نیازها
+## پیش‌نیازهای گوشی
 
-- Android Studio یا JDK 17
-- Android SDK Platform 35
-- Build Tools 35
-- Node.js 18 یا بالاتر برای ساخت runtime
-- Node.js مخصوص Android ARM64/Bionic برای اجرای واقعی داخل APK
+- Android 10 یا بالاتر
+- Termux از F-Droid یا GitHub رسمی
+- اجرای یک‌باره Termux
+- تنظیم `allow-external-apps=true` در `~/.termux/termux.properties`
+- فعال‌کردن مجوز **Run commands in Termux** برای برنامه 9Router
 
-## مرحله اول: آماده‌سازی runtime
-
-```bash
-./scripts/package_runtime.sh --node /path/to/node-aarch64-linux-android
-```
-
-اسکریپت نسخه upstream 9Router را روی commit زیر build می‌کند:
-
-```text
-eb712ca821f0ba6bc41043fbd14494c5af5daba5
-```
-
-سپس standalone build شامل `server.js`، `custom-server.js`، `.next/static`، `public` و dependencyهای runtime را در assets کپی می‌کند.
-
-## مرحله دوم: ساخت APK
+## Build APK
 
 ```bash
 ./gradlew assembleDebug
@@ -36,18 +22,23 @@ app/build/outputs/apk/debug/app-debug.apk
 app/build/outputs/apk/release/app-release-unsigned.apk
 ```
 
-## نصب روی دستگاه ARM64
+## اجرای برنامه روی گوشی
+
+1. APK را نصب کنید.
+2. Termux را باز کنید تا نصب اولیه آن کامل شود.
+3. در Termux این فایل را ویرایش کنید:
 
 ```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+mkdir -p ~/.termux
+printf 'allow-external-apps=true\n' >> ~/.termux/termux.properties
 ```
 
-حداقل Android نسخه 10 / API 29 است.
+4. Termux را ببندید و دوباره باز کنید.
+5. در Android Settings، برای 9Router مجوز Run commands in Termux را فعال کنید.
+6. برنامه 9Router را باز کنید و CONNECT را بزنید.
 
-## Release امضاشده
+برنامه به‌صورت خودکار وجود `nodejs-lts`، `npm`، `git` و `curl` را بررسی و موارد ناقص را با `pkg install` نصب می‌کند، سپس upstream 9Router را build و start می‌کند.
 
-برای انتشار واقعی، signing config را در `app/build.gradle.kts` اضافه کنید و password را فقط از environment variable بخوانید. Keystore، password و credentialها را commit نکنید.
+## نکته
 
-## نکته مهم
-
-APKهای موجود در `artifacts/` قبل از افزودن Node.js مخصوص Android ساخته شده‌اند. برای Functional APK باید runtime را با `package_runtime.sh` پر کنید و مجدداً build بگیرید.
+نسخه Termux باید از یک منبع سازگار نصب شود؛ نسخه‌های F-Droid و GitHub را با هم ترکیب نکنید. Android اجازه نصب یا اعطای permission را به‌صورت silent نمی‌دهد و این مرحله حتماً باید توسط کاربر انجام شود.

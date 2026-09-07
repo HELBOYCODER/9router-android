@@ -1,80 +1,88 @@
-# کلاینت اندروید 9Router
+# کلاینت اندروید 9Router با Termux
 
-یک برنامه Native برای اندروید که نمونه Self-Hosted پروژه [9Router](https://9router.com/) را مستقیماً روی دستگاه اجرا می‌کند؛ بدون Root، بدون Termux و بدون نیاز به اجرای دستی Node.js یا Shell.
+این برنامه یک نمونه Self-Hosted از [9Router](https://9router.com/) را از طریق integration رسمی Termux روی گوشی اجرا و مدیریت می‌کند.
 
-> **وضعیت مهم:** سورس اندروید و APKها با موفقیت build شده‌اند. برای اجرای واقعی 9Router داخل APK باید قبل از build نهایی، یک Node.js سازگار با Android/Bionic برای معماری ARM64 به runtime اضافه شود. یک Node معمولی Linux/glibc روی Android اجرا نمی‌شود.
+## روند اجرا
+
+1. Termux را از F-Droid یا GitHub رسمی نصب کنید.
+2. Termux را یک‌بار باز کنید.
+3. در `~/.termux/termux.properties` قرار دهید:
+
+```text
+allow-external-apps=true
+```
+
+4. در تنظیمات Android برای برنامه 9Router مجوز **Run commands in Termux** را فعال کنید.
+5. در برنامه 9Router روی **CONNECT** بزنید.
+
+برنامه بررسی می‌کند که موارد زیر نصب هستند یا نه:
+
+- `pkg`
+- `nodejs-lts`
+- `npm`
+- `git`
+- `curl`
+
+اگر چیزی وجود نداشته باشد، bootstrap داخل Termux آن را نصب می‌کند. سپس:
+
+- نسخه upstream 9Router را clone می‌کند.
+- commit مشخص‌شده را checkout می‌کند.
+- `npm install` را اجرا می‌کند.
+- `npm run build` را اجرا می‌کند.
+- Secretهای محلی را با Node crypto می‌سازد.
+- سرور را روی پورت تنظیم‌شده اجرا می‌کند.
+- برنامه با `/v1/models` سلامت server را بررسی می‌کند.
+
+## Endpointهای پیش‌فرض
+
+```text
+API:       http://127.0.0.1:20128/v1
+Dashboard: http://127.0.0.1:20128/dashboard
+```
+
+## نکته امنیتی Android
+
+برنامه‌های Android نمی‌توانند بدون اجازه کاربر:
+
+- Termux را نصب کنند.
+- مجوز Run commands in Termux را فعال کنند.
+- اجرای فرمان خارجی را دور بزنند.
+
+این محدودیت عمداً توسط Android اعمال می‌شود. بنابراین فقط نصب Termux و فعال‌کردن مجوز یک‌بار توسط کاربر لازم است؛ بعد از آن نصب prerequisiteها و اجرای 9Router خودکار انجام می‌شود.
 
 ## امکانات
 
-- دکمه CONNECT / DISCONNECT
-- Foreground Service برای اجرای پایدار در پس‌زمینه
-- اجرای API سازگار با OpenAI در:
-  - `http://127.0.0.1:20128/v1`
-- داشبورد داخلی WebView در:
-  - `http://127.0.0.1:20128/dashboard`
-- تنظیم Host و Port
-- حالت Localhost فقط به‌صورت پیش‌فرض
-- حالت اختیاری LAN با هشدار امنیتی
-- تولید Secretهای تصادفی برای هر instance
-- نگهداری Secretها با Android Keystore و EncryptedSharedPreferences
-- بررسی سلامت `/v1/models`
-- Restart خودکار کنترل‌شده با Exponential Backoff
-- Reinitialize کردن instance محلی
-- نمایش، پاک‌سازی، کپی و Export لاگ‌ها
-- مدیریت Providerها از داشبورد اصلی 9Router
-- عدم قرار دادن API Key یا credential در سورس یا لاگ
+- CONNECT / DISCONNECT
+- Foreground Service
+- Health Check
+- Restart خودکار کنترل‌شده
+- Reinitialize instance
+- تنظیم Port و Host
+- Localhost-only به‌صورت پیش‌فرض
+- LAN mode با هشدار امنیتی
+- Secretهای تصادفی و Android Keystore
+- Log viewer، Copy و Export
+- داشبورد داخلی WebView
+- Provider screen برای تنظیم Providerها از داشبورد upstream
 
-## ساخت Runtime نهایی
-
-از ریشه پروژه اجرا کنید:
-
-```bash
-./scripts/package_runtime.sh --node /path/to/node-aarch64-linux-android
-```
-
-فایل Node باید برای Android ARM64 و Bionic ساخته شده باشد؛ گزینه‌های ممکن:
-
-- nodejs-mobile
-- Node مربوط به Termux برای ARM64
-- یک build اختصاصی با target `aarch64-linux-android`
-
-سپس APK را بسازید:
+## Build
 
 ```bash
 ./gradlew assembleDebug
 ./gradlew assembleRelease
 ```
 
-## APKهای ساخته‌شده
-
-- Debug: `artifacts/9router-android-debug.apk`
-- Release unsigned: `artifacts/9router-android-release-unsigned.apk`
-
-این APKها از نظر Android/Gradle build معتبر هستند، اما در محیط فعلی فقط runtime placeholder وجود داشت؛ بنابراین برای اجرای واقعی 9Router باید ابتدا `package_runtime.sh` اجرا و سپس APK دوباره ساخته شود.
-
-## امنیت
-
-- حالت پیش‌فرض فقط `127.0.0.1` است.
-- فعال‌سازی `0.0.0.0` با هشدار صریح انجام می‌شود.
-- Secretهای محلی با `SecureRandom` تولید می‌شوند.
-- credentialهای Providerها توسط کاربر و در داشبورد upstream تنظیم می‌شوند.
-- برنامه هیچ توکن Provider را برای عبور از quota یا محدودیت‌های سرویس تولید، harvest یا rotate نمی‌کند.
-- لاگ‌ها قبل از ذخیره و Export sanitize می‌شوند.
-
-## مستندات
-
-- [English README](./README.md)
-- [معماری و محدودیت‌ها](./docs/ARCHITECTURE.md)
-- [راهنمای Build](./docs/BUILD.md)
-- [عیب‌یابی](./docs/TROUBLESHOOTING.md)
-
-## نسخه upstream
-
-نسخه استفاده‌شده از upstream:
+نسخه upstream استفاده‌شده:
 
 ```text
 eb712ca821f0ba6bc41043fbd14494c5af5daba5
 9Router v0.5.69
 ```
 
-منطق routing/provider upstream بازنویسی نشده است؛ Android فقط wrapper، lifecycle، runtime extraction، service، UI و security storage را اضافه می‌کند.
+## مستندات
+
+- [English README](./README.md)
+- [راهنمای فارسی Build](./docs/BUILD.fa.md)
+- [راهنمای Build انگلیسی](./docs/BUILD.md)
+- [عیب‌یابی فارسی](./docs/TROUBLESHOOTING.fa.md)
+- [معماری انگلیسی](./docs/ARCHITECTURE.md)

@@ -48,14 +48,22 @@ class RouterProcess(
         if (isAlive) return true
         val node = config.nodeExecutable
         if (!node.exists()) {
-            LogStore.error(logTag, "Node executable not found at ${node.absolutePath}")
+            LogStore.error(
+                logTag,
+                "Android Node.js runtime is missing. Expected ${node.absolutePath}. " +
+                    "Run scripts/package_runtime.sh with an aarch64-linux-android Node binary."
+            )
             return false
         }
         if (!node.canExecute()) {
             node.setExecutable(true, true)
         }
         if (!File(config.bundleDir, "custom-server.js").exists()) {
-            LogStore.error(logTag, "9Router standalone bundle missing (custom-server.js)")
+            LogStore.error(
+                logTag,
+                "9Router standalone bundle is missing. Expected ${File(config.bundleDir, "custom-server.js").absolutePath}. " +
+                    "Run scripts/package_runtime.sh before building the APK."
+            )
             return false
         }
 

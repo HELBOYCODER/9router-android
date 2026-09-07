@@ -4,6 +4,9 @@
 
     <!-- Network / socket access -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Termux integration: user must grant this in Android Settings. -->
+    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
@@ -24,6 +27,11 @@
     <uses-permission
         android:name="android.permission.ACCESS_LOCAL_NETWORK"
         tools:targetApi="36" />
+
+    <!-- Android 11+ package visibility for detecting Termux. -->
+    <queries>
+        <package android:name="com.termux" />
+    </queries>
 
     <application
         android:name=".NineRouterApp"

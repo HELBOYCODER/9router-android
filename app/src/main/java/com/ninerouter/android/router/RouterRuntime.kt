@@ -48,8 +48,18 @@ object RouterRuntime {
             copyAssetTree(am, ASSET_ROOT, root)
             // Node needs +x on itself.
             nodeExecutable(context).setExecutable(true, true)
-            AppLogger.i(TAG, "Embedded 9Router runtime extracted to ${root.absolutePath}")
-            true
+            val complete = isPresent(context)
+            if (complete) {
+                AppLogger.i(TAG, "Embedded 9Router runtime extracted to ${root.absolutePath}")
+            } else {
+                AppLogger.e(
+                    TAG,
+                    "Embedded runtime is incomplete: expected ${nodeExecutable(context).absolutePath} " +
+                        "and ${File(bundleDir(context), "custom-server.js").absolutePath}. " +
+                        "Run scripts/package_runtime.sh with an Android ARM64 Node binary."
+                )
+            }
+            complete
         }.getOrElse {
             AppLogger.e(TAG, "Failed to extract embedded runtime: ${it.message}")
             false

@@ -44,6 +44,7 @@ object RouterManager {
     val logs: StateFlow<List<com.ninerouter.android.model.LogEntry>> = LogStore.entries
 
     @Volatile private var currentProcess: RouterProcess? = null
+    @Volatile private var currentConfig: com.ninerouter.android.model.InstanceConfig? = null
     @Volatile private var shouldBeRunning = false
     @Volatile private var intentionalStop = false
     @Volatile private var restartAttempts = 0
@@ -88,7 +89,8 @@ object RouterManager {
             lastError = error,
             requestCount = requestCount,
             instanceId = instanceId,
-            runtimePresent = RouterRuntime.isPresent(appContext!!),
+            runtimePresent = TermuxIntegration.isInstalled(appContext!!) &&
+                TermuxIntegration.hasPermission(appContext!!),
         )
     }
 
@@ -115,7 +117,7 @@ object RouterManager {
     fun stop() {
         scope.launch {
             mutex.withLock {
-                if (!shouldBeRunning && currentProcess == null) {
+                if (!shouldBeRunning && currentProcess == null && currentConfig == null) {
                     emit(ConnectionStatus.STOPPED)
                     return@withLock
                 }
@@ -194,8 +196,15 @@ object RouterManager {
     private suspend fun launchInstance(settings: com.ninerouter.android.model.Settings, port: Int) {
         val ctx = appContext ?: return
 
-        if (!RouterRuntime.extractIfNeeded(ctx)) {
-            emit(ConnectionStatus.ERROR, error = "Embedded 9Router runtime not found. Run scripts/package_runtime.sh, then rebuild.")
+        if (!TermuxIntegration.isInstalled(ctx)) {
+            emit(ConnectionStatus.ERROR, error = "Termux is not installed. Install Termux from F-Droid or the official GitHub release.")
+            LogStore.error(TAG, "Termux package com.termux was not found")
+            shouldBeRunning = false
+            return
+        }
+        if (!TermuxIntegration.hasPermission(ctx)) {
+            emit(ConnectionStatus.ERROR, error = "Grant 'Run commands in Termux' permission in Android Settings, then retry.")
+            LogStore.error(TAG, "Missing com.termux.permission.RUN_COMMAND")
             shouldBeRunning = false
             return
         }
@@ -214,26 +223,17 @@ object RouterManager {
             instanceId = InstanceManager.currentInstanceId(ctx),
         )
 
-        val process = RouterProcess(
-            config = config,
-            requestLogEnabled = settings.requestLogEnabled,
-            onExit = { code -> handleExit(code) },
-            onRequestDetected = {
-                requestCount = requestCount + 1
-                val newCount = requestCount
-                patch { copy(requestCount = newCount) }
-            },
-        )
-        currentProcess = process
-
-        if (!process.start()) {
-            emit(ConnectionStatus.ERROR, host = config.bindHost, port = config.port, apiKey = apiKey,
-                error = "Failed to start 9Router process", instanceId = InstanceManager.currentInstanceId(ctx))
+        currentConfig = config
+        if (!TermuxIntegration.start(ctx, config)) {
+            emit(ConnectionStatus.ERROR, host = config.host, port = config.port, apiKey = apiKey,
+                error = "Could not start Termux. Install/open Termux and grant Run commands permission.",
+                instanceId = InstanceManager.currentInstanceId(ctx))
             shouldBeRunning = false
             return
         }
 
-        // Health verification
+        // Bootstrap/build can take a while on the first run. Health verification
+        // waits until the Termux-owned Node process answers.
         healthJob = scope.launch {
             val health = HealthChecker.waitUntilHealthy(config.apiBaseUrl, apiKey, HEALTH_TIMEOUT_MS)
             if (!shouldBeRunning) return@launch
@@ -248,6 +248,17 @@ object RouterManager {
                     error = null,
                     instanceId = InstanceManager.currentInstanceId(ctx),
                 )
+                // Termux owns the server process, so observe it through health
+                // probes rather than Process.waitFor().
+                while (shouldBeRunning) {
+                    delay(5_000)
+                    val check = HealthChecker.check(config.apiBaseUrl, apiKey)
+                    if (!check.healthy) {
+                        LogStore.warn(TAG, "Termux-hosted 9Router stopped responding")
+                        handleExit(-1)
+                        break
+                    }
+                }
             } else {
                 LogStore.error(TAG, "Health check failed: ${health.error ?: "no response (HTTP ${health.httpCode})"}")
                 // The process may still be cranking; give the auto-recovery a chance
@@ -304,6 +315,11 @@ object RouterManager {
         currentProcess = null
         if (p != null) {
             p.stop()
+        }
+        val cfg = currentConfig
+        currentConfig = null
+        if (cfg != null) {
+            appContext?.let { TermuxIntegration.stop(it, cfg.port) }
         }
         requestCount = 0L
     }
