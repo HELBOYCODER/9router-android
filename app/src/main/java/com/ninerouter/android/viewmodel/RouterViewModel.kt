@@ -39,9 +39,11 @@ class RouterViewModel(app: Application) : AndroidViewModel(app) {
     fun settingsSnapshot(): Settings = _settings.value
 
     // ---- Connection controls (delegated to the foreground service) ----
+    fun installPrerequisites() = RouterManager.installPrerequisites(getApplication())
     fun connect() = RouterForegroundService.start(getApplication())
     fun disconnect() = RouterForegroundService.stop(getApplication())
     fun restart() = RouterForegroundService.restart(getApplication())
+    fun reinstall() = RouterManager.reinstall(getApplication())
     fun reinitialize() = RouterForegroundService.reinit(getApplication())
 
     /** Wipe all application-owned runtime data (instances + extracted runtime). */

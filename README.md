@@ -28,7 +28,10 @@ fresh per instance and never hard-coded, never committed, and never logged.
 
 | Feature | Status |
 |--------|--------|
-| CONNECT / DISCONNECT button | ✅ |
+| **Install Prerequisites button** (instant setup of Node.js, npm, 9Router) | ✅ |
+| **CONNECT / DISCONNECT button** (starts daemon & probes health) | ✅ |
+| **Reinstall with Specs button** (backup/restore db, update package, preserve keys) | ✅ |
+| Bundled offline assets & installer scripts | ✅ |
 | Persistent Android Foreground Service | ✅ |
 | Termux Node.js + 9Router bootstrap | ✅ (automatic prerequisite check/install) |
 | OpenAI-compatible `/v1` endpoint | ✅ |

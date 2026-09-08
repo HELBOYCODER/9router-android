@@ -148,6 +148,39 @@ object RouterManager {
         }
     }
 
+    /** Install all system and 9Router prerequisites. */
+    fun installPrerequisites(context: Context) {
+        initialize(context)
+        scope.launch {
+            mutex.withLock {
+                LogStore.info(TAG, "Installing prerequisites (Node.js, npm, 9Router)...")
+                emit(ConnectionStatus.CONNECTING, error = "Installing prerequisites in background...")
+                TermuxIntegration.installPrerequisites(context)
+            }
+        }
+    }
+
+    /** Reinstall 9Router preserving configuration and previous credentials. */
+    fun reinstall(context: Context) {
+        initialize(context)
+        scope.launch {
+            mutex.withLock {
+                intentionalStop = true
+                shouldBeRunning = false
+                doStop()
+                LogStore.info(TAG, "Reinstalling 9Router (preserving existing credentials)...")
+                emit(ConnectionStatus.CONNECTING, error = "Reinstalling 9Router with specs...")
+                val settings = loadSettings()
+                val config = InstanceManager.buildConfig(context, settings.host, settings.port, settings.lanMode)
+                TermuxIntegration.reinstall(context, config)
+                shouldBeRunning = true
+                intentionalStop = false
+                restartAttempts = 0
+                launchInstance(settings, settings.port)
+            }
+        }
+    }
+
     /** Reinitialize: fresh data dir, fresh secrets, clean config, then start. */
     fun reinitialize(context: Context) {
         initialize(context)

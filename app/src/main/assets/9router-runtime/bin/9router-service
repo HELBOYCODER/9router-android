@@ -1,0 +1,169 @@
+#!/bin/sh
+# 9router-service - Background daemon manager for 9Router on Minis (Android PRoot)
+
+PID_FILE="/root/.9router/server.pid"
+LOG_FILE="/root/.9router/server.log"
+APP_DIR="/usr/local/lib/node_modules/9router/app"
+DATA_DIR="/root/.9router"
+BACKUP_DIR="/root/.9router/backup"
+PORT="${PORT:-20128}"
+HOST="${HOST:-0.0.0.0}"
+
+get_pid() {
+  if [ -f "$PID_FILE" ]; then
+    pid=$(cat "$PID_FILE" 2>/dev/null)
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "$pid"
+      return 0
+    fi
+  fi
+  pid=$(ps aux | grep "[c]ustom-server.js\|[n]ext-server" | awk '{print $1}' | head -n 1)
+  if [ -n "$pid" ]; then
+    echo "$pid"
+    return 0
+  fi
+  return 1
+}
+
+get_lan_ip() {
+  ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | grep -E '^[0-9.]+$' | head -n 1
+}
+
+case "$1" in
+  start)
+    pid=$(get_pid)
+    if [ -n "$pid" ]; then
+      echo "9router is already running (PID: $pid)"
+      exit 0
+    fi
+
+    if [ ! -d "$APP_DIR" ]; then
+      echo "Error: 9Router app directory not found at $APP_DIR"
+      echo "Run 9router-reinstall or install.sh first."
+      exit 1
+    fi
+
+    mkdir -p "$DATA_DIR"
+    cd "$APP_DIR" || exit 1
+
+    NODE_PATH="$DATA_DIR/runtime/node_modules:$APP_DIR/node_modules" \
+    PORT="$PORT" HOSTNAME="$HOST" \
+    nohup node --dns-result-order=ipv4first custom-server.js > "$LOG_FILE" 2>&1 &
+
+    new_pid=$!
+    echo "$new_pid" > "$PID_FILE"
+    echo "9router daemon started with PID $new_pid (Port: $PORT)"
+    ;;
+
+  stop)
+    pid=$(get_pid)
+    if [ -n "$pid" ]; then
+      kill -9 "$pid" 2>/dev/null
+      rm -f "$PID_FILE"
+      echo "9router daemon stopped (PID: $pid)"
+    else
+      echo "9router is not running"
+    fi
+    ;;
+
+  status)
+    pid=$(get_pid)
+    if curl -s "http://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '{"ok":true}'; then
+      lan_ip=$(get_lan_ip)
+      echo "✅ 9router running healthy (PID: ${pid:-unknown}) on port $PORT"
+      echo "   • Local:     http://127.0.0.1:$PORT"
+      if [ -n "$lan_ip" ]; then
+        echo "   • LAN:       http://$lan_ip:$PORT"
+      fi
+      echo "   • Dashboard: http://127.0.0.1:$PORT/dashboard"
+      echo "   • API Base:  http://127.0.0.1:$PORT/v1"
+      exit 0
+    else
+      if [ -n "$pid" ]; then
+        echo "⚠️ 9router process is running (PID: $pid) but healthcheck failed."
+      else
+        echo "⭕ 9router is stopped"
+      fi
+      exit 1
+    fi
+    ;;
+
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+
+  reinstall|upgrade|update)
+    echo "========================================================="
+    echo "🔄 Reinstalling 9Router on Minis (Preserving All Configs)"
+    echo "========================================================="
+    
+    # 1. Stop service
+    $0 stop >/dev/null 2>&1 || true
+
+    # 2. Preserve & Backup current database, keys, and tokens
+    if [ -d "$DATA_DIR/db" ] || [ -f "$DATA_DIR/jwt-secret" ]; then
+      echo "📦 Backing up existing database & credentials..."
+      mkdir -p "$BACKUP_DIR"
+      cp -r "$DATA_DIR/db" "$BACKUP_DIR/" 2>/dev/null || true
+      cp "$DATA_DIR/jwt-secret" "$BACKUP_DIR/" 2>/dev/null || true
+    fi
+
+    # 3. Check & fix npm toolchain
+    if [ -L "/usr/local/bin/npm" ]; then
+      TARGET=$(readlink /usr/local/bin/npm)
+      if echo "$TARGET" | grep -q "node"; then
+        echo "Fixing npm symlink -> /usr/bin/npm"
+        ln -sf /usr/bin/npm /usr/local/bin/npm
+      fi
+    elif [ ! -x "/usr/local/bin/npm" ] && [ -x "/usr/bin/npm" ]; then
+      ln -sf /usr/bin/npm /usr/local/bin/npm
+    fi
+
+    # 4. Reinstall latest 9router from npm
+    echo "⬇️ Fetching and installing latest 9router package..."
+    npm install -g 9router@latest --prefer-online
+
+    # 5. Restore backup if data was wiped
+    if [ ! -f "$DATA_DIR/db/data.sqlite" ] && [ -f "$BACKUP_DIR/db/data.sqlite" ]; then
+      echo "Restoring previous database from backup..."
+      mkdir -p "$DATA_DIR/db"
+      cp -r "$BACKUP_DIR/db/"* "$DATA_DIR/db/"
+      [ -f "$BACKUP_DIR/jwt-secret" ] && cp "$BACKUP_DIR/jwt-secret" "$DATA_DIR/"
+    fi
+
+    # 6. Restart daemon
+    echo "🚀 Restarting 9Router service..."
+    $0 start
+    for _ in 1 2 3 4 5 6; do
+      if curl -s "http://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '{"ok":true}'; then
+        break
+      fi
+      sleep 1
+    done
+
+    # 7. Print status and credentials
+    echo ""
+    $0 status
+    echo ""
+    echo "Default Credentials Preserved:"
+    echo "  • Dashboard Password: 123456"
+    echo "  • Default API Key:    sk-test"
+    echo "========================================================="
+    ;;
+
+  logs)
+    lines="${2:-50}"
+    if [ -f "$LOG_FILE" ]; then
+      tail -n "$lines" "$LOG_FILE"
+    else
+      echo "No log file found at $LOG_FILE"
+    fi
+    ;;
+
+  *)
+    echo "Usage: 9router-service {start|stop|status|restart|reinstall|logs [N]}"
+    exit 1
+    ;;
+esac

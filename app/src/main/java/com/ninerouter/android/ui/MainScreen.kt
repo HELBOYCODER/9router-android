@@ -9,6 +9,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.List
 import androidx.compose.material.icons.outlined.Cloud
+import androidx.compose.material.icons.outlined.CloudDownload
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.Stop
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -46,8 +50,10 @@ fun MainScreen(
         Screen.Main -> MainContent(
             state = state,
             settings = settings,
+            onInstallPrerequisites = { vm.installPrerequisites() },
             onConnect = { vm.connect() },
             onDisconnect = { vm.disconnect() },
+            onReinstall = { vm.reinstall() },
             onOpenDashboard = onOpenDashboard,
             onOpenLogs = { screen = Screen.Logs },
             onOpenProviders = { screen = Screen.Providers },
@@ -67,8 +73,10 @@ fun MainScreen(
 private fun MainContent(
     state: RouterStatus,
     settings: Settings,
+    onInstallPrerequisites: () -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
+    onReinstall: () -> Unit,
     onOpenDashboard: () -> Unit,
     onOpenLogs: () -> Unit,
     onOpenProviders: () -> Unit,
@@ -90,24 +98,65 @@ private fun MainContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // Main action
+        // 1. Install Prerequisites Button
+        Button(
+            onClick = onInstallPrerequisites,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+            ),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("نصب پیش‌نیازها (INSTALL PREREQUISITES)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // 2. Connect / Disconnect Action
         if (state.isRunning) {
             Button(
                 onClick = onDisconnect,
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                modifier = Modifier.fillMaxWidth().height(58.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                    contentColor = MaterialTheme.colorScheme.onError
+                ),
                 shape = RoundedCornerShape(16.dp),
             ) {
-                Text("DISCONNECT", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.Stop, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("قطع اتصال (DISCONNECT)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         } else {
             Button(
                 onClick = onConnect,
-                modifier = Modifier.fillMaxWidth().height(60.dp),
+                modifier = Modifier.fillMaxWidth().height(58.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                ),
                 shape = RoundedCornerShape(16.dp),
             ) {
-                Text("CONNECT", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Outlined.PlayArrow, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("اتصال و شروع (CONNECT)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        // 3. Reinstall with Specs Button
+        OutlinedButton(
+            onClick = onReinstall,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(16.dp),
+        ) {
+            Icon(Icons.Outlined.Refresh, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text("نصب دوباره با مشخصه‌های جدید (REINSTALL)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
         }
 
         if (state.lastError != null && state.status == ConnectionStatus.ERROR) {

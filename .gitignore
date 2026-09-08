@@ -11,7 +11,9 @@ local.properties
 app/build/
 *.keystore
 !debug.keystore
-app/src/main/assets/9router-runtime/
+app/src/main/assets/9router-runtime/bundle/
+!app/src/main/assets/9router-runtime/
+!app/src/main/assets/9router-runtime/**
 !app/src/main/assets/9router-runtime/README.txt
 *.env
 .env

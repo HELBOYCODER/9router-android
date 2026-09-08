@@ -78,6 +78,35 @@ object TermuxIntegration {
         }
     }
 
+    fun installPrerequisites(context: Context): Boolean {
+        if (!isInstalled(context)) {
+            LogStore.error(TAG, "Termux is not installed. Install Termux first.")
+            return false
+        }
+        if (!hasPermission(context)) {
+            LogStore.error(TAG, "Grant 'Run commands in Termux' permission in Android Settings.")
+            return false
+        }
+        val shell = "termux-wake-lock 2>/dev/null || true; " +
+            "pkg update -y >/dev/null 2>&1 || true; " +
+            "pkg install -y git nodejs-lts python curl openssl-tool termux-services termux-api >/dev/null 2>&1 || true; " +
+            "npm install -g 9router@latest --prefer-online >/dev/null 2>&1 || true; " +
+            "echo '[9router] prerequisites successfully installed!'"
+        LogStore.info(TAG, "Prerequisites install command dispatched to Termux")
+        return runCommand(context, shell)
+    }
+
+    fun reinstall(context: Context, config: InstanceConfig): Boolean {
+        if (!isInstalled(context) || !hasPermission(context)) return false
+        val shell = "HOME_DIR=\"\$HOME\"; APP_DIR=\"\$HOME_DIR/.9router\"; " +
+            "mkdir -p \"\$APP_DIR/backup\"; " +
+            "cp -r \"\$APP_DIR/data\" \"\$APP_DIR/backup/\" 2>/dev/null || true; " +
+            "cp \"\$APP_DIR/.env\" \"\$APP_DIR/backup/\" 2>/dev/null || true; " +
+            "npm install -g 9router@latest --prefer-online >/dev/null 2>&1 || true"
+        runCommand(context, shell)
+        return start(context, config, false)
+    }
+
     fun stop(context: Context, port: Int): Boolean = runCommand(
         context,
         "sv down 9router 2>/dev/null || true; " +
