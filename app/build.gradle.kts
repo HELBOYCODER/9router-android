@@ -21,8 +21,8 @@ android {
         // Android 10 (API 29) minimum, per requirements.
         minSdk = 29
         targetSdk = 35
-        versionCode = 10
-        versionName = "1.3.2"
+        versionCode = 11
+        versionName = "1.3.3"
 
         // ARM64 only is the required ABI. Add "universal" via splits below if desired.
         ndk {

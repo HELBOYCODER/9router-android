@@ -50,7 +50,6 @@ fun MainScreen(
         Screen.Main -> MainContent(
             state = state,
             settings = settings,
-            onInstallPrerequisites = { vm.installPrerequisites() },
             onConnect = { vm.connect() },
             onDisconnect = { vm.disconnect() },
             onReinstall = { vm.reinstall() },
@@ -73,7 +72,6 @@ fun MainScreen(
 private fun MainContent(
     state: RouterStatus,
     settings: Settings,
-    onInstallPrerequisites: () -> Unit,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onReinstall: () -> Unit,
@@ -98,73 +96,59 @@ private fun MainContent(
 
         Spacer(Modifier.height(20.dp))
 
-        // 1. Install Prerequisites Button
+        // === ALL-IN-ONE: single button does wipe → install → build → connect ===
         Button(
-            onClick = onInstallPrerequisites,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            onClick = {
+                if (state.isRunning) {
+                    onDisconnect()
+                } else {
+                    onConnect()
+                }
+            },
+            modifier = Modifier.fillMaxWidth().height(64.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                containerColor = if (state.isRunning) MaterialTheme.colorScheme.error
+                                 else MaterialTheme.colorScheme.primary,
+                contentColor = if (state.isRunning) MaterialTheme.colorScheme.onError
+                               else MaterialTheme.colorScheme.onPrimary
             ),
             shape = RoundedCornerShape(16.dp),
         ) {
-            Icon(Icons.Outlined.CloudDownload, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text("نصب پیش‌نیازها (INSTALL PREREQUISITES)", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-        }
-
-        Spacer(Modifier.height(10.dp))
-
-        // 2. Connect / Disconnect Action
-        if (state.isRunning) {
-            Button(
-                onClick = onDisconnect,
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.error,
-                    contentColor = MaterialTheme.colorScheme.onError
-                ),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Outlined.Stop, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("قطع اتصال (DISCONNECT)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            }
-        } else {
-            Button(
-                onClick = onConnect,
-                modifier = Modifier.fillMaxWidth().height(58.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary
-                ),
-                shape = RoundedCornerShape(16.dp),
-            ) {
-                Icon(Icons.Outlined.PlayArrow, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("اتصال و شروع (CONNECT)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Icon(
+                if (state.isRunning) Icons.Outlined.Stop else Icons.Outlined.PlayArrow,
+                contentDescription = null
+            )
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    if (state.isRunning) "قطع اتصال (DISCONNECT)" else "شروع و اتصال (START & CONNECT)",
+                    fontSize = 15.sp, fontWeight = FontWeight.Bold
+                )
+                if (!state.isRunning) {
+                    Text("وایپ کامل → نصب → بیلد → اتصال", fontSize = 10.sp, fontWeight = FontWeight.Normal)
+                }
             }
         }
 
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
 
-        // 3. Hard Reinstall — burns old keys & rebuilds fresh (with confirmation)
+        // === Force Reinstall (destructive, with confirmation) ===
         var showReinstallConfirm by remember { mutableStateOf(false) }
         OutlinedButton(
             onClick = { showReinstallConfirm = true },
-            modifier = Modifier.fillMaxWidth().height(52.dp),
+            modifier = Modifier.fillMaxWidth().height(48.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
         ) {
             Icon(Icons.Outlined.Refresh, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("نصب دوباره سخت — کلیدهای قبلی می‌سوزد (HARD REINSTALL)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            Text("نصب مجدد کامل — کلیدها می‌سوزد (FORCE REINSTALL)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         if (showReinstallConfirm) {
             AlertDialog(
                 onDismissRequest = { showReinstallConfirm = false },
-                title = { Text("نصب دوباره سخت؟") },
-                text = { Text("همه کلیدها، دیتابیس و کش بیلد قبلی کامل پاک می‌شود و همه‌چیز از صفر با کلیدهای جدید ساخته می‌شود. کلیدهای قبلی دیگر کار نمی‌کند. ادامه می‌دهید؟") },
+                title = { Text("نصب مجدد کامل؟") },
+                text = { Text("همه کلیدها، دیتابیس و کش قبلی کامل پاک شده و همه‌چی از صفر با کلیدهای جدید ساخته می‌شود. کلیدهای قبلی دیگر کار نمی‌کنند.") },
                 confirmButton = {
                     TextButton(onClick = { showReinstallConfirm = false; onReinstall() }) { Text("بله، بسوزان و از نو بساز") }
                 },

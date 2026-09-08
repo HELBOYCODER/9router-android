@@ -148,20 +148,12 @@ object RouterManager {
         }
     }
 
-    /** Install all system and 9Router prerequisites. */
-    fun installPrerequisites(context: Context) {
-        initialize(context)
-        scope.launch {
-            mutex.withLock {
-                LogStore.info(TAG, "Installing prerequisites (Node.js, npm, 9Router)...")
-                emit(ConnectionStatus.CONNECTING, error = "Installing prerequisites in background...")
-                TermuxIntegration.installPrerequisites(context)
-            }
-        }
-    }
-
-    /** Hard reinstall — burns all old keys & data, rebuilds everything from scratch. */
-    fun reinstall(context: Context) {
+    /**
+     * ALL-IN-ONE: wipe → install Termux packages → clone/build → start server → health check.
+     * Every invocation destroys old keys and builds from scratch.
+     * This is the ONLY button the user needs to tap.
+     */
+    fun startAllInOne(context: Context) {
         initialize(context)
         scope.launch {
             mutex.withLock {
@@ -169,43 +161,67 @@ object RouterManager {
                 shouldBeRunning = false
                 doStop()
                 LogStore.clear()
-                LogStore.info(TAG, "🔥 Hard reinstall — wiping old keys, DB & build (fresh instance)...")
-                emit(ConnectionStatus.CONNECTING, error = "Hard reinstall — burning old keys & rebuilding fresh...")
-                // Burn Android-side secrets so previous API keys / JWTs are dead
+                LogStore.info(TAG, "🔥 ALL-IN-ONE: wipe → install → build → start (fresh keys every time)")
+                emit(ConnectionStatus.CONNECTING, error = "All-in-one: wiping old data and rebuilding…")
+                // Burn Android-side secrets
                 SecureStorage.get(context).rotateSecrets()
-                // Fresh instance dir so previous instance data is abandoned
                 InstanceManager.newCurrentInstance(context)
+                // Dispatch single Termux command that does everything
                 val settings = loadSettings()
                 val config = InstanceManager.buildConfig(context, settings.host, settings.port, settings.lanMode)
-                TermuxIntegration.hardReinstall(context, config)
+                if (!TermuxIntegration.runAllInOne(context, config)) {
+                    val msg = when {
+                        !TermuxIntegration.isInstalled(context) -> "Termux not installed. Install from F-Droid or GitHub releases."
+                        !TermuxIntegration.hasPermission(context) -> "Grant 'Run commands in Termux' permission in Android Settings."
+                        else -> "Could not start Termux RunCommandService."
+                    }
+                    emit(ConnectionStatus.ERROR, error = msg)
+                    shouldBeRunning = false
+                    return@withLock
+                }
                 shouldBeRunning = true
                 intentionalStop = false
                 restartAttempts = 0
-                launchInstance(settings, settings.port)
+                // Health-check the server while it boots
+                healthJob = scope.launch {
+                    val health = HealthChecker.waitUntilHealthy(config.dashboardUrl, 300_000L)
+                    if (!shouldBeRunning) return@launch
+                    if (health.healthy) {
+                        LogStore.info(TAG, "Dashboard reachable (HTTP ${health.httpCode}, ${health.latencyMs}ms)")
+                        emit(
+                            status = ConnectionStatus.CONNECTED,
+                            host = config.host, port = config.port, apiKey = config.apiKey,
+                            startedAt = System.currentTimeMillis(), error = null,
+                            instanceId = InstanceManager.currentInstanceId(context),
+                        )
+                        // Keep monitoring
+                        while (shouldBeRunning) {
+                            delay(8_000)
+                            val probe = HealthChecker.check(config.dashboardUrl)
+                            if (!probe.healthy) {
+                                LogStore.warn(TAG, "Dashboard stopped responding")
+                                handleExit(-1)
+                                break
+                            }
+                        }
+                    } else {
+                        LogStore.error(TAG, "Health check failed: ${health.error ?: "no response"}")
+                        emit(ConnectionStatus.ERROR, error = "9Router did not become reachable in 5 min. Check Termux logs.")
+                        shouldBeRunning = false
+                    }
+                }
             }
         }
     }
 
-    /** Reinitialize: fresh data dir, fresh secrets, clean config, then start. */
-    fun reinitialize(context: Context) {
-        initialize(context)
-        scope.launch {
-            mutex.withLock {
-                intentionalStop = true
-                shouldBeRunning = false
-                doStop()
-                LogStore.clear()
-                LogStore.info(TAG, "Reinitializing local instance…")
-                SecureStorage.get(context).rotateSecrets()
-                InstanceManager.newCurrentInstance(context)
-                shouldBeRunning = true
-                intentionalStop = false
-                restartAttempts = 0
-                val settings = loadSettings()
-                launchInstance(settings, settings.port)
-            }
-        }
-    }
+    /** Force reinstall = startAllInOne (same thing — always wipes, always rebuilds). */
+    fun reinstall(context: Context) = startAllInOne(context)
+
+    /** Legacy alias. */
+    fun installPrerequisites(context: Context) = startAllInOne(context)
+
+    /** Legacy alias. */
+    fun reinitialize(context: Context) = startAllInOne(context)
 
     /** Wipe all application-owned runtime data (runtime + instances). */
     fun clearRuntimeData(context: Context) {
