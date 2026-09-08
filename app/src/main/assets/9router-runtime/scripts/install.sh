@@ -69,13 +69,17 @@ chmod +x /usr/local/bin/9router-service /usr/local/bin/9router-reinstall
 echo -e "${GREEN}✓ Installed: /usr/local/bin/9router-service${NC}"
 echo -e "${GREEN}✓ Installed: /usr/local/bin/9router-reinstall${NC}"
 
-# 4. Restore database if needed
+# 4. Restore database if needed & inject OpenCode Free
 if [ ! -f "$DATA_DIR/db/data.sqlite" ] && [ -f "$BACKUP_DIR/db/data.sqlite" ]; then
   echo "Restoring database from backup..."
   mkdir -p "$DATA_DIR/db"
   cp -r "$BACKUP_DIR/db/"* "$DATA_DIR/db/"
   [ -f "$BACKUP_DIR/jwt-secret" ] && cp "$BACKUP_DIR/jwt-secret" "$DATA_DIR/"
 fi
+
+# Ensure OpenCode Free connection is initialized
+mkdir -p "$DATA_DIR/db"
+sqlite3 "$DATA_DIR/db/data.sqlite" "INSERT OR IGNORE INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('opencode-free-conn', 'opencode', 'noAuth', 'OpenCode Free', 1, 1, '{\"apiKey\":\"public\"}', datetime('now'), datetime('now'));" 2>/dev/null || true
 
 # 5. Start daemon
 echo -e "\n${YELLOW}[4/5] Starting 9Router background daemon...${NC}"

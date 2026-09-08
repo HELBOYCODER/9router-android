@@ -125,13 +125,17 @@ case "$1" in
     echo "⬇️ Fetching and installing latest 9router package..."
     npm install -g 9router@latest --prefer-online
 
-    # 5. Restore backup if data was wiped
+    # 5. Restore backup if data was wiped & ensure OpenCode Free
     if [ ! -f "$DATA_DIR/db/data.sqlite" ] && [ -f "$BACKUP_DIR/db/data.sqlite" ]; then
       echo "Restoring previous database from backup..."
       mkdir -p "$DATA_DIR/db"
       cp -r "$BACKUP_DIR/db/"* "$DATA_DIR/db/"
       [ -f "$BACKUP_DIR/jwt-secret" ] && cp "$BACKUP_DIR/jwt-secret" "$DATA_DIR/"
     fi
+
+    # Ensure OpenCode Free provider is present
+    mkdir -p "$DATA_DIR/db"
+    sqlite3 "$DATA_DIR/db/data.sqlite" "INSERT OR IGNORE INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('opencode-free-conn', 'opencode', 'noAuth', 'OpenCode Free', 1, 1, '{\"apiKey\":\"public\"}', datetime('now'), datetime('now'));" 2>/dev/null || true
 
     # 6. Restart daemon
     echo "🚀 Restarting 9Router service..."
