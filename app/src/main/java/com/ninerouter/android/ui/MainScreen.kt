@@ -148,15 +148,30 @@ private fun MainContent(
 
         Spacer(Modifier.height(10.dp))
 
-        // 3. Reinstall with Specs Button
+        // 3. Hard Reinstall — burns old keys & rebuilds fresh (with confirmation)
+        var showReinstallConfirm by remember { mutableStateOf(false) }
         OutlinedButton(
-            onClick = onReinstall,
+            onClick = { showReinstallConfirm = true },
             modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
             shape = RoundedCornerShape(16.dp),
         ) {
             Icon(Icons.Outlined.Refresh, contentDescription = null)
             Spacer(Modifier.width(8.dp))
-            Text("نصب دوباره با مشخصه‌های جدید (REINSTALL)", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text("نصب دوباره سخت — کلیدهای قبلی می‌سوزد (HARD REINSTALL)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+        if (showReinstallConfirm) {
+            AlertDialog(
+                onDismissRequest = { showReinstallConfirm = false },
+                title = { Text("نصب دوباره سخت؟") },
+                text = { Text("همه کلیدها، دیتابیس و کش بیلد قبلی کامل پاک می‌شود و همه‌چیز از صفر با کلیدهای جدید ساخته می‌شود. کلیدهای قبلی دیگر کار نمی‌کند. ادامه می‌دهید؟") },
+                confirmButton = {
+                    TextButton(onClick = { showReinstallConfirm = false; onReinstall() }) { Text("بله، بسوزان و از نو بساز") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showReinstallConfirm = false }) { Text("انصراف") }
+                }
+            )
         }
 
         if (state.lastError != null && state.status == ConnectionStatus.ERROR) {

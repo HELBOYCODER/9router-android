@@ -160,7 +160,7 @@ object RouterManager {
         }
     }
 
-    /** Reinstall 9Router preserving configuration and previous credentials. */
+    /** Hard reinstall — burns all old keys & data, rebuilds everything from scratch. */
     fun reinstall(context: Context) {
         initialize(context)
         scope.launch {
@@ -168,11 +168,16 @@ object RouterManager {
                 intentionalStop = true
                 shouldBeRunning = false
                 doStop()
-                LogStore.info(TAG, "Reinstalling 9Router (preserving existing credentials)...")
-                emit(ConnectionStatus.CONNECTING, error = "Reinstalling 9Router with specs...")
+                LogStore.clear()
+                LogStore.info(TAG, "🔥 Hard reinstall — wiping old keys, DB & build (fresh instance)...")
+                emit(ConnectionStatus.CONNECTING, error = "Hard reinstall — burning old keys & rebuilding fresh...")
+                // Burn Android-side secrets so previous API keys / JWTs are dead
+                SecureStorage.get(context).rotateSecrets()
+                // Fresh instance dir so previous instance data is abandoned
+                InstanceManager.newCurrentInstance(context)
                 val settings = loadSettings()
                 val config = InstanceManager.buildConfig(context, settings.host, settings.port, settings.lanMode)
-                TermuxIntegration.reinstall(context, config)
+                TermuxIntegration.hardReinstall(context, config)
                 shouldBeRunning = true
                 intentionalStop = false
                 restartAttempts = 0

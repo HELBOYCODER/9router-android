@@ -96,19 +96,19 @@ case "$1" in
 
   reinstall|upgrade|update)
     echo "========================================================="
-    echo "🔄 Reinstalling 9Router on Minis (Preserving All Configs)"
+    echo "🔥 HARD REINSTALL — burning old keys & rebuilding fresh"
     echo "========================================================="
     
     # 1. Stop service
     $0 stop >/dev/null 2>&1 || true
+    sleep 1
 
-    # 2. Preserve & Backup current database, keys, and tokens
-    if [ -d "$DATA_DIR/db" ] || [ -f "$DATA_DIR/jwt-secret" ]; then
-      echo "📦 Backing up existing database & credentials..."
-      mkdir -p "$BACKUP_DIR"
-      cp -r "$DATA_DIR/db" "$BACKUP_DIR/" 2>/dev/null || true
-      cp "$DATA_DIR/jwt-secret" "$BACKUP_DIR/" 2>/dev/null || true
-    fi
+    # 2. HARD WIPE — destroy previous DB, secrets, and backups so old keys die
+    echo "🧨 Wiping previous database, jwt-secret, and backups (old keys invalidated)..."
+    rm -rf "$DATA_DIR/db" "$DATA_DIR/jwt-secret" "$DATA_DIR/data.sqlite" 2>/dev/null || true
+    rm -rf "$BACKUP_DIR" 2>/dev/null || true
+    rm -f "$DATA_DIR/.env" 2>/dev/null || true
+    mkdir -p "$DATA_DIR/db"
 
     # 3. Check & fix npm toolchain
     if [ -L "/usr/local/bin/npm" ]; then
@@ -125,17 +125,9 @@ case "$1" in
     echo "⬇️ Fetching and installing latest 9router package..."
     npm install -g 9router@latest --prefer-online
 
-    # 5. Restore backup if data was wiped & ensure OpenCode Free
-    if [ ! -f "$DATA_DIR/db/data.sqlite" ] && [ -f "$BACKUP_DIR/db/data.sqlite" ]; then
-      echo "Restoring previous database from backup..."
-      mkdir -p "$DATA_DIR/db"
-      cp -r "$BACKUP_DIR/db/"* "$DATA_DIR/db/"
-      [ -f "$BACKUP_DIR/jwt-secret" ] && cp "$BACKUP_DIR/jwt-secret" "$DATA_DIR/"
-    fi
-
-    # Ensure OpenCode Free provider is present
-    mkdir -p "$DATA_DIR/db"
-    sqlite3 "$DATA_DIR/db/data.sqlite" "INSERT OR IGNORE INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('opencode-free-conn', 'opencode', 'noAuth', 'OpenCode Free', 1, 1, '{\"apiKey\":\"public\"}', datetime('now'), datetime('now'));" 2>/dev/null || true
+    # 5. Fresh DB will be auto-created on first start with brand-new secrets
+    # Ensure OpenCode Free provider is present after DB creation (delay injection via start)
+    echo "✨ Fresh install — new secrets & DB will be generated on start"
 
     # 6. Restart daemon
     echo "🚀 Restarting 9Router service..."

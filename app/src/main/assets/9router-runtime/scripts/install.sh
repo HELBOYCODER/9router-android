@@ -20,13 +20,14 @@ echo -e "${BOLD}====================================================${NC}"
 echo -e "${BOLD} 🚀 9Router Minis Installer (Alpine / PRoot aarch64)${NC}"
 echo -e "${BOLD}====================================================${NC}"
 
-# 0. Backup existing data if reinstalling
-if [ -d "$DATA_DIR/db" ] || [ -f "$DATA_DIR/jwt-secret" ]; then
-  echo -e "\n${CYAN}[0/5] Backing up existing database & credentials...${NC}"
-  mkdir -p "$BACKUP_DIR"
-  cp -r "$DATA_DIR/db" "$BACKUP_DIR/" 2>/dev/null || true
-  cp "$DATA_DIR/jwt-secret" "$BACKUP_DIR/" 2>/dev/null || true
-  echo -e "${GREEN}✓ Preserved existing database and tokens in $BACKUP_DIR${NC}"
+# 0. HARD WIPE — destroy previous DB, secrets & backups so old keys die
+if [ -d "$DATA_DIR/db" ] || [ -f "$DATA_DIR/jwt-secret" ] || [ -d "$BACKUP_DIR" ]; then
+  echo -e "\n${RED}[0/5] 🧨 Hard wipe — invalidating previous keys & database...${NC}"
+  rm -rf "$DATA_DIR/db" "$DATA_DIR/jwt-secret" "$DATA_DIR/data.sqlite" 2>/dev/null || true
+  rm -rf "$BACKUP_DIR" 2>/dev/null || true
+  rm -f "$DATA_DIR/.env" 2>/dev/null || true
+  mkdir -p "$DATA_DIR/db"
+  echo -e "${YELLOW}  → Previous keys burned, fresh DB will be generated on start${NC}"
 fi
 
 # 1. Repair npm symlink if broken
@@ -69,25 +70,23 @@ chmod +x /usr/local/bin/9router-service /usr/local/bin/9router-reinstall
 echo -e "${GREEN}✓ Installed: /usr/local/bin/9router-service${NC}"
 echo -e "${GREEN}✓ Installed: /usr/local/bin/9router-reinstall${NC}"
 
-# 4. Restore database if needed & inject OpenCode Free
-if [ ! -f "$DATA_DIR/db/data.sqlite" ] && [ -f "$BACKUP_DIR/db/data.sqlite" ]; then
-  echo "Restoring database from backup..."
-  mkdir -p "$DATA_DIR/db"
-  cp -r "$BACKUP_DIR/db/"* "$DATA_DIR/db/"
-  [ -f "$BACKUP_DIR/jwt-secret" ] && cp "$BACKUP_DIR/jwt-secret" "$DATA_DIR/"
-fi
-
-# Ensure OpenCode Free connection is initialized
+# 4. Fresh DB — will be auto-created on first start; inject OpenCode Free afterwards
 mkdir -p "$DATA_DIR/db"
-sqlite3 "$DATA_DIR/db/data.sqlite" "INSERT OR IGNORE INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('opencode-free-conn', 'opencode', 'noAuth', 'OpenCode Free', 1, 1, '{\"apiKey\":\"public\"}', datetime('now'), datetime('now'));" 2>/dev/null || true
+echo -e "${CYAN}Fresh database — new secrets will be generated on daemon start${NC}"
+# OpenCode Free injection is deferred until after health check (DB must exist first)
 
 # 5. Start daemon
 echo -e "\n${YELLOW}[4/5] Starting 9Router background daemon...${NC}"
 /usr/local/bin/9router-service restart
 
-# 6. Verify Health
+# 6. Verify Health and inject OpenCode Free into fresh DB
 echo -e "\n${YELLOW}[5/5] Checking health status...${NC}"
 sleep 2
+# Inject OpenCode Free provider after DB is created by the daemon
+if [ -f "$DATA_DIR/db/data.sqlite" ]; then
+  sqlite3 "$DATA_DIR/db/data.sqlite" "INSERT OR IGNORE INTO providerConnections (id, provider, authType, name, priority, isActive, data, createdAt, updatedAt) VALUES ('opencode-free-conn', 'opencode', 'noAuth', 'OpenCode Free', 1, 1, '{\"apiKey\":\"public\"}', datetime('now'), datetime('now'));" 2>/dev/null || true
+  echo -e "${GREEN}✓ OpenCode Free provider ensured${NC}"
+fi
 if /usr/local/bin/9router-service status; then
   LAN_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7}' | grep -E '^[0-9.]+$' | head -n 1)
   echo -e "\n${GREEN}${BOLD}====================================================${NC}"
@@ -101,7 +100,7 @@ if /usr/local/bin/9router-service status; then
   echo -e "Default API Key: sk-test"
   echo -e ""
   echo -e "Commands:"
-  echo -e "  9router-reinstall         # Reinstall anytime preserving configs"
+  echo -e "  9router-reinstall         # Hard reinstall — old keys invalidated, fresh build"
   echo -e "  9router-service status    # Check status"
   echo -e "  9router-service logs      # Live logs"
   echo -e "  9router-service restart   # Restart daemon"

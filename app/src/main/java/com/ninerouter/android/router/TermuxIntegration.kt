@@ -96,15 +96,20 @@ object TermuxIntegration {
         return runCommand(context, shell)
     }
 
-    fun reinstall(context: Context, config: InstanceConfig): Boolean {
+    /** Legacy alias — now hard-wipes (old keys die). */
+    fun reinstall(context: Context, config: InstanceConfig): Boolean = hardReinstall(context, config)
+
+    /** Hard reinstall — burns old DB, secrets, backups and build cache; rebuilds from scratch. */
+    fun hardReinstall(context: Context, config: InstanceConfig): Boolean {
         if (!isInstalled(context) || !hasPermission(context)) return false
-        val shell = "HOME_DIR=\"\$HOME\"; APP_DIR=\"\$HOME_DIR/.9router\"; " +
-            "mkdir -p \"\$APP_DIR/backup\"; " +
-            "cp -r \"\$APP_DIR/data\" \"\$APP_DIR/backup/\" 2>/dev/null || true; " +
-            "cp \"\$APP_DIR/.env\" \"\$APP_DIR/backup/\" 2>/dev/null || true; " +
-            "npm install -g 9router@latest --prefer-online >/dev/null 2>&1 || true"
+        LogStore.warn(TAG, "Hard reinstall: wiping Termux data, secrets and build cache — old keys invalidated")
+        val shell = "HOME_DIR=\"\$HOME\"; APP_DIR=\"\$HOME_DIR/.9router\"; REPO_DIR=\"\$HOME_DIR/.9router/upstream\"; " +
+            "rm -rf \"\$APP_DIR/data\" \"\$APP_DIR/.env\" \"\$APP_DIR/backup\" \"\$APP_DIR/data.sqlite\" \"\$APP_DIR/jwt-secret\" 2>/dev/null || true; " +
+            "rm -rf \"\$REPO_DIR/.next\" 2>/dev/null || true; " +
+            "npm install -g 9router@latest --prefer-online >/dev/null 2>&1 || true; " +
+            "echo '[9router] hard wipe done — old keys burned, fresh build will be generated'"
         runCommand(context, shell)
-        return start(context, config, false)
+        return start(context, config, true)
     }
 
     fun stop(context: Context, port: Int): Boolean = runCommand(
